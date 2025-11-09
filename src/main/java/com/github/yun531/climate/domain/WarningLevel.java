@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 public enum WarningLevel {
+    WATCH("예비특보"),
     ADVISORY("주의보"),
     WARNING("경보");
 

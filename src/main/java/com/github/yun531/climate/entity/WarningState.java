@@ -25,11 +25,11 @@ public class WarningState {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "kind", length = 16)
-    private WarningKind kind;                    // 예: 호우 / 폭염 / 강풍 / 태풍 ...
+    private WarningKind kind;                    // 호우 / 폭염 / 강풍 / 태풍 ...
 
     @Enumerated(EnumType.STRING)
     @Column(name = "level", length = 16)
-    private WarningLevel level;                   // 예: 주의보 / 경보
+    private WarningLevel level;                   // 예비특보 / 주의보 / 경보
 
     @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
     @org.hibernate.annotations.Generated(org.hibernate.annotations.GenerationTime.ALWAYS)

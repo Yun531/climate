@@ -44,7 +44,7 @@ class WarningServiceTest {
         WarningState r1heat    = repo.save(WarningState.builder().regionId(R1).kind(WarningKind.HEAT).level(WarningLevel.ADVISORY).build());
 
         jdbc.update("UPDATE warning_state SET updated_at='2025-11-04 06:00:00' WHERE warning_id=?", r1rainOld.getWarningId());
-        jdbc.update("UPDATE warning_state SET updated_at='2025-11-04 07:00:00' WHERE warning_id=?", r1rainNew.getWarningId()); // todo: 새로운 튜플을 만듦 or 업데이트?
+        jdbc.update("UPDATE warning_state SET updated_at='2025-11-04 07:00:00' WHERE warning_id=?", r1rainNew.getWarningId());
         jdbc.update("UPDATE warning_state SET updated_at='2025-11-04 06:00:00' WHERE warning_id=?", r1heat.getWarningId());
 
         // R2: WIND 1건
