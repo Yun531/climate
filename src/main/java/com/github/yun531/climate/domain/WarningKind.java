@@ -23,7 +23,9 @@ public enum WarningKind {
 
     @JsonCreator  // JSON 입력에서 한글 라벨을 Enum으로 변환할 때 (역직렬화)
     public static WarningKind fromLabel(String label){
-        for (var k : values()) if (k.label.equals(label)) return k;
+        for (var kind : values()) {
+            if (kind.label.equals(label)) return kind;
+        }
         throw new IllegalArgumentException("Unknown kind: " + label);
     }
 }
