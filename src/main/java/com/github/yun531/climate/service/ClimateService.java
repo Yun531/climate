@@ -1,9 +1,9 @@
 package com.github.yun531.climate.service;
 
+import static com.github.yun531.climate.support.PopArrays.*;
 import com.github.yun531.climate.dto.POPSnapDto;
 import com.github.yun531.climate.repository.ClimateSnapRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -12,14 +12,17 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ClimateService {
 
+    /** todo: 디폴트 스냅샷 id 변화에 대응 (예: 1=현재, 10=이전) */
+    private static final long SNAP_CURRENT_DEFAULT = 1L;
+    private static final long SNAP_PREV_DEFAULT    = 10L;
+
     private final ClimateSnapRepository climateSnapRepository;
 
-    /** todo: 디폴트 스냅샷 id 변화에 대응 (예: 1=현재, 10=이전) */
     public PopSeries loadDefaultPopSeries(Long regionId) {
-        return loadPopSeries(regionId, 1L, 10L);
+        return loadPopSeries(regionId, SNAP_CURRENT_DEFAULT, SNAP_PREV_DEFAULT);
     }
     public ForecastSeries loadDefaultForecastSeries(Long regionId) {
-        return loadForecastSeries(regionId, 1L); // 필요 시 @Value로 주입
+        return loadForecastSeries(regionId, SNAP_CURRENT_DEFAULT);
     }
 
     /** 비(POP) 판정에 필요한 시계열을 로드 (현재, 이전스냅샷-좌측1칸시프트) */
@@ -34,21 +37,23 @@ public class ClimateService {
         }
         if (cur == null || prv == null) return new PopSeries(null, null);
 
-        int[] curArr = com.github.yun531.climate.support.PopArrays.hourly24(cur);
-        int[] prvArr = com.github.yun531.climate.support.PopArrays.hourly24(prv);
-        int[] prvShift = com.github.yun531.climate.support.PopArrays.shiftLeftBy1ToLen23(prvArr);
+        int[] curArr = hourly24(cur);
+        int[] prvArr = hourly24(prv);
+        int[] prvShift = shiftLeftBy1ToLen23(prvArr);
+
         return new PopSeries(curArr, prvShift);
     }
 
-    /** 예보 요약용: 현재 스냅에서 시간대 24 + 오전/오후[7][2] */
+    /** 예보 요약용: 스냅에서 시간대 24 + 오전/오후[7][2] */
     public ForecastSeries loadForecastSeries(Long regionId, Long snapId) {
         List<POPSnapDto> rows = climateSnapRepository
                 .findPopInfoBySnapIdsAndRegionId(List.of(snapId), regionId);
         POPSnapDto dto = rows.isEmpty() ? null : rows.get(0);
         if (dto == null) return new ForecastSeries(null, null);
 
-        int[] hourly24 = com.github.yun531.climate.support.PopArrays.hourly24(dto);
-        Byte[][] ampm7x2 = com.github.yun531.climate.support.PopArrays.ampm7x2(dto);
+        int[] hourly24 = hourly24(dto);
+        Byte[][] ampm7x2 = ampm7x2(dto);
+
         return new ForecastSeries(hourly24, ampm7x2);
     }
 

@@ -16,10 +16,6 @@ public class WarningService {
 
     private final WarningStateRepository warningStateRepository;
 
-    /**
-     * 지역별 모든 kind에 대해, 각 kind의 "가장 최근(updated_at DESC)" 특보 상태 1건씩 반환.
-     * 반환 구조: regionId -> (kind -> 최신 WarningStateDto)
-     */
     public Map<Long, Map<WarningKind, WarningStateDto>> findLatestByRegionAndKind(List<Long> regionIds) {
         if (regionIds == null || regionIds.isEmpty()) return Map.of();
 
@@ -52,6 +48,7 @@ public class WarningService {
         for (var e : pick.entrySet()) {
             Long regionId = e.getKey();
             Map<WarningKind, WarningStateDto> mapByKind = new LinkedHashMap<>();
+
             for (var kEntry : e.getValue().entrySet()) {
                 WarningState ws = kEntry.getValue();
                 mapByKind.put(kEntry.getKey(), WarningStateDto.from(ws));
@@ -67,17 +64,18 @@ public class WarningService {
         Instant ib = b.getUpdatedAt();
 
         if (ia == null && ib == null) {
-            return a.getWarningId() > b.getWarningId(); // tie-break
+            return a.getWarningId() > b.getWarningId();
         }
         if (ia == null) return false;
-        if (ib == null) return true;
+        if (ib == null) return true;   // null 이 아닌쪽 이 더 최신
 
         int cmp = ia.compareTo(ib);
         if (cmp != 0) return cmp > 0;
+
         return a.getWarningId() > b.getWarningId(); // 동일 시각일 때 더 최신 id 선택
     }
 
-    /** since 이후 '새로 발효/변경'으로 간주 */
+    /** since 이후 새로 발효/변경 판단 */
     public boolean isNewlyIssuedSince(WarningStateDto state, Instant since) {
         return state != null
                 && state.getUpdatedAt() != null

@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -66,7 +65,7 @@ public class NotificationGeneratorService {
         // 중복 제거 (type|region|occurredAt 기준)
         List<AlertEvent> deduped = deduplicate(events);
 
-        // 정렬 (지역, 타입명, 발생시각 asc)
+        // 정렬 (타입, 지역, 발생시각)
         deduped.sort(Comparator
                 .comparing(AlertEvent::type,
                         Comparator.nullsLast(Comparator.comparingInt(Enum::ordinal)))

@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 
 public interface AlertRule {
+    /** @return 해당 룰이 지원하는 AlertTypeEnum */
     AlertTypeEnum supports();
 
     /**

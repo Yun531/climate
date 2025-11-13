@@ -24,7 +24,7 @@ public class RainForecastRule implements AlertRule {
 
     private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
     private static final int TH = 60;
-    private long currentSnapId = 1L;  // todo: snapId 임시 하드코딩
+    private long SNAP_CURRENT_DEFAULT = 1L;  // todo: snapId 임시 하드코딩
 
     @Override public AlertTypeEnum supports() { return AlertTypeEnum.RAIN_FORECAST; }
 
@@ -36,7 +36,7 @@ public class RainForecastRule implements AlertRule {
         ZonedDateTime now = ZonedDateTime.now(ZONE);
 
         for (Long regionId : regionIds) {
-            ClimateService.ForecastSeries fs = climateService.loadForecastSeries(regionId, currentSnapId);
+            ClimateService.ForecastSeries fs = climateService.loadForecastSeries(regionId, SNAP_CURRENT_DEFAULT);
 
             List<String> hourlyParts = buildHourlyParts(fs, now); // 오늘/내일 시간대 상세
             List<String> dayParts    = buildDayParts(fs);         // D+0~6 오전/오후

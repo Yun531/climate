@@ -20,7 +20,6 @@ public class RainOnsetChangeRule implements AlertRule {
 
     /** 지역별 캐시: 계산결과 + 계산시각 */
     private final Map<Long, CacheEntry> cache = new ConcurrentHashMap<>();
-
     private record CacheEntry(List<AlertEvent> events, Instant computedAt) {}
 
     @Override public AlertTypeEnum supports() { return AlertTypeEnum.RAIN_ONSET; }
@@ -32,7 +31,6 @@ public class RainOnsetChangeRule implements AlertRule {
         List<AlertEvent> out = new ArrayList<>();
 
         for (Long regionId : regionIds) {
-            // 캐시 조회
             CacheEntry entry = cache.get(regionId);
 
             // 재계산 필요 여부 판정: 캐시 없음 OR since==null OR (computedAt < since - 40m)
