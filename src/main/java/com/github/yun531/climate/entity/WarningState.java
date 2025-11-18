@@ -1,10 +1,13 @@
 package com.github.yun531.climate.entity;
 
-import com.github.yun531.climate.domain.WarningKind;
-import com.github.yun531.climate.domain.WarningLevel;
+import java.time.Instant;
 import jakarta.persistence.*;
 import lombok.*;
-import java.time.Instant;
+import org.hibernate.annotations.Generated;
+import org.hibernate.generator.EventType;
+
+import com.github.yun531.climate.domain.WarningKind;
+import com.github.yun531.climate.domain.WarningLevel;
 
 @Getter
 @Setter
@@ -31,7 +34,8 @@ public class WarningState {
     @Column(name = "level", length = 16)
     private WarningLevel level;                   // 예비특보 / 주의보 / 경보
 
+
+    @Generated(event = { EventType.INSERT, EventType.UPDATE })
     @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
-    @org.hibernate.annotations.Generated(org.hibernate.annotations.GenerationTime.ALWAYS)
     private Instant updatedAt;              // 특보 발효/갱신 시각
-}
+}   // todo: Instant 를 LocalDateTime로 변경 (좀 많음)

@@ -14,7 +14,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.github.yun531.climate.support.PopArrays.n;
+// todo : PopArrays.n 지웠음 해당 함수 커버
 
 @Component
 @RequiredArgsConstructor
