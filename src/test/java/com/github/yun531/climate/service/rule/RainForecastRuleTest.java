@@ -1,9 +1,10 @@
 package com.github.yun531.climate.service.rule;
 
 
-import com.github.yun531.climate.domain.PopDailySeries7;
-import com.github.yun531.climate.domain.PopSeries24;
-import com.github.yun531.climate.domain.SnapKindEnum;
+import com.github.yun531.climate.dto.ForecastSeries;
+import com.github.yun531.climate.dto.PopDailySeries7;
+import com.github.yun531.climate.dto.PopSeries24;
+import com.github.yun531.climate.dto.SnapKindEnum;
 import com.github.yun531.climate.service.ClimateService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,7 +43,7 @@ class RainForecastRuleTest {
         PopSeries24 hourly = new PopSeries24(Collections.nCopies(24, 0));
 
         when(climateService.loadForecastSeries(1, snapId))
-                .thenReturn(new ClimateService.ForecastSeries(hourly, daily));
+                .thenReturn(new ForecastSeries(hourly, daily));
 
         RainForecastRule rule = new RainForecastRule(climateService);
 
@@ -92,7 +93,7 @@ class RainForecastRuleTest {
         int snapId = SnapKindEnum.SNAP_CURRENT.getCode();
 
         when(climateService.loadForecastSeries(1, snapId))
-                .thenReturn(new ClimateService.ForecastSeries(hourly, daily));
+                .thenReturn(new ForecastSeries(hourly, daily));
 
         RainForecastRule rule = new RainForecastRule(climateService);
 

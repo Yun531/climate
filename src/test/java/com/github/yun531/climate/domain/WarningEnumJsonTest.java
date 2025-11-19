@@ -3,6 +3,8 @@ package com.github.yun531.climate.domain;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.github.yun531.climate.dto.WarningKind;
+import com.github.yun531.climate.dto.WarningLevel;
 import com.github.yun531.climate.dto.WarningStateDto;
 import org.junit.jupiter.api.Test;
 

@@ -1,7 +1,5 @@
 package com.github.yun531.climate.dto;
 
-import com.github.yun531.climate.domain.WarningKind;
-import com.github.yun531.climate.domain.WarningLevel;
 import com.github.yun531.climate.entity.WarningState;
 import lombok.*;
 

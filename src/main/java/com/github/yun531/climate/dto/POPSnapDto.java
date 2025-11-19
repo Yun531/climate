@@ -1,7 +1,5 @@
 package com.github.yun531.climate.dto;
 
-import com.github.yun531.climate.domain.PopDailySeries7;
-import com.github.yun531.climate.domain.PopSeries24;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;

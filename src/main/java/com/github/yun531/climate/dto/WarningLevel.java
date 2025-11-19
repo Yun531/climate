@@ -1,4 +1,4 @@
-package com.github.yun531.climate.domain;
+package com.github.yun531.climate.dto;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
@@ -19,11 +19,4 @@ public enum WarningLevel {
         return label;
     }
 
-    @JsonCreator  // JSON 입력에서 한글 라벨을 Enum으로 변환할 때 (역직렬화)
-    public static WarningLevel fromLabel(String label) {
-        for (WarningLevel level : values()) {
-            if (level.label.equals(label)) return level;
-        }
-        throw new IllegalArgumentException("Unknown level: " + label);
-    }
 }

@@ -1,4 +1,4 @@
-package com.github.yun531.climate.domain;
+package com.github.yun531.climate.dto;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
@@ -21,11 +21,4 @@ public enum WarningKind {
     @JsonValue   // JSON 응답에 한글 라벨을 내보내고 싶을 때 (직렬화)
     public String getLabel(){ return label; }
 
-    @JsonCreator  // JSON 입력에서 한글 라벨을 Enum으로 변환할 때 (역직렬화)
-    public static WarningKind fromLabel(String label){
-        for (var kind : values()) {
-            if (kind.label.equals(label)) return kind;
-        }
-        throw new IllegalArgumentException("Unknown kind: " + label);
-    }
 }

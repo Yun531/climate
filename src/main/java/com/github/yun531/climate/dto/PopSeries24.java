@@ -1,4 +1,4 @@
-package com.github.yun531.climate.domain;
+package com.github.yun531.climate.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

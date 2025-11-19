@@ -1,7 +1,8 @@
 package com.github.yun531.climate.service.rule;
 
 
-import com.github.yun531.climate.domain.PopSeries24;
+import com.github.yun531.climate.dto.PopSeries;
+import com.github.yun531.climate.dto.PopSeries24;
 import com.github.yun531.climate.service.ClimateService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -64,7 +65,7 @@ class RainOnsetChangeRuleTest {
         PopSeries24 previous = new PopSeries24(prvVals);
 
         when(climateService.loadDefaultPopSeries(7))
-                .thenReturn(new ClimateService.PopSeries(current, previous, 3, LocalDateTime.parse("2025-11-18T11:00:00")));
+                .thenReturn(new PopSeries(current, previous, 3, LocalDateTime.parse("2025-11-18T11:00:00")));
 
         var events = rule.evaluate(List.of(7), null);
         assertThat(events).isEmpty();
@@ -75,7 +76,7 @@ class RainOnsetChangeRuleTest {
         RainOnsetChangeRule rule = new RainOnsetChangeRule(climateService);
 
         when(climateService.loadDefaultPopSeries(9))
-                .thenReturn(new ClimateService.PopSeries(null, null, 0, LocalDateTime.parse("2025-11-18T11:00:00")));
+                .thenReturn(new PopSeries(null, null, 0, LocalDateTime.parse("2025-11-18T11:00:00")));
 
         var events = rule.evaluate(List.of(9), null);
         assertThat(events).isEmpty();
@@ -210,8 +211,8 @@ class RainOnsetChangeRuleTest {
         int regionId01 = 1, regionId02 = 2;
         int th = RainThresholdEnum.RAIN.getThreshold();
 
-        ClimateService.PopSeries series01 = seriesWithCrossAtHour(2, th);
-        ClimateService.PopSeries series02 = seriesWithCrossAtHour(6, th);
+        PopSeries series01 = seriesWithCrossAtHour(2, th);
+        PopSeries series02 = seriesWithCrossAtHour(6, th);
 
         when(climateService.loadDefaultPopSeries(regionId01)).thenReturn(series01);
         when(climateService.loadDefaultPopSeries(regionId02)).thenReturn(series02);
@@ -254,7 +255,7 @@ class RainOnsetChangeRuleTest {
     }
 
     // ---- helper ----
-    private static ClimateService.PopSeries seriesWithCrossAtHour(int hour, int th) {
+    private static PopSeries seriesWithCrossAtHour(int hour, int th) {
         List<Integer> curVals = new ArrayList<>(Collections.nCopies(24, 0));
         List<Integer> prvVals = new ArrayList<>(Collections.nCopies(24, 0));
 
@@ -267,6 +268,6 @@ class RainOnsetChangeRuleTest {
 
         // 이전 스냅과 현재 스냅의 시간 간격(시간 단위) – 테스트에서는 0으로 단순화
         int gapHours = 0;
-        return new ClimateService.PopSeries(current, previous, gapHours, LocalDateTime.parse("2025-11-18T11:00:00"));
+        return new PopSeries(current, previous, gapHours, LocalDateTime.parse("2025-11-18T11:00:00"));
     }
 }

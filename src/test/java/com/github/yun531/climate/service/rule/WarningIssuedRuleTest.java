@@ -1,7 +1,7 @@
 package com.github.yun531.climate.service.rule;
 
-import com.github.yun531.climate.domain.WarningKind;
-import com.github.yun531.climate.domain.WarningLevel;
+import com.github.yun531.climate.dto.WarningKind;
+import com.github.yun531.climate.dto.WarningLevel;
 import com.github.yun531.climate.dto.WarningStateDto;
 import com.github.yun531.climate.service.WarningService;
 import org.junit.jupiter.api.Test;

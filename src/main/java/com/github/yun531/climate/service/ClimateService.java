@@ -1,11 +1,7 @@
 package com.github.yun531.climate.service;
 
-import com.github.yun531.climate.domain.PopDailySeries7;
-import com.github.yun531.climate.domain.PopSeries24;
-import com.github.yun531.climate.domain.SnapKindEnum;
-import com.github.yun531.climate.dto.POPSnapDto;
+import com.github.yun531.climate.dto.*;
 import com.github.yun531.climate.repository.ClimateSnapRepository;
-import io.micrometer.common.lang.Nullable;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -25,59 +21,78 @@ public class ClimateService {
     public PopSeries loadDefaultPopSeries(int regionId) {
         return loadPopSeries(regionId, SNAP_CURRENT, SNAP_PREV);
     }
+
     public ForecastSeries loadDefaultForecastSeries(int regionId) {
         return loadForecastSeries(regionId, SNAP_CURRENT);
     }
 
     /** 비(POP) 판정에 필요한 시계열을 로드 (현재*이전 스냅샷) */
     public PopSeries loadPopSeries(int regionId, int currentSnapId, int previousSnapId) {
-        List<Integer> ids = List.of(currentSnapId, previousSnapId);
-        List<POPSnapDto> snaps =
-                climateSnapRepository.findPopInfoBySnapIdsAndRegionId(ids, regionId);
+        List<Integer> snapIds = List.of(currentSnapId, previousSnapId);
+        List<POPSnapDto> snaps = fetchSnaps(regionId, snapIds);
 
-        POPSnapDto cur = null;
-        POPSnapDto prv = null;
-        for (POPSnapDto s : snaps) {
-            if (s.getSnapId() == currentSnapId) {
-                cur = s;
-            } else if (s.getSnapId() == previousSnapId) {
-                prv = s;
-            }
-        }
+        POPSnapDto cur = findSnapById(snaps, currentSnapId);
+        POPSnapDto prv = findSnapById(snaps, previousSnapId);
 
         if (cur == null || prv == null) {
-            return new PopSeries(null, null, 0, null);
+            return emptyPopSeries();
         }
 
+        int reportTimeGap = computeReportTimeGap(prv.getReportTime(), cur.getReportTime());
         LocalDateTime curReportTime = cur.getReportTime();
-        LocalDateTime prvReportTime = prv.getReportTime();
 
-        long minutes = Duration.between(prvReportTime, curReportTime).toMinutes();
-        int reportTimeGap = (int) Math.round(minutes / 60.0);
-
-        return new PopSeries(cur.getHourly(), prv.getHourly(), reportTimeGap, curReportTime);
+        return new PopSeries(
+                cur.getHourly(),
+                prv.getHourly(),
+                reportTimeGap,
+                curReportTime
+        );
     }
 
     /** 예보 요약용: 스냅에서 시간대 [24] + 오전/오후[14] */
     public ForecastSeries loadForecastSeries(int regionId, int snapId) {
-        List<POPSnapDto> rows =
-                climateSnapRepository.findPopInfoBySnapIdsAndRegionId(List.of(snapId), regionId);
-
-        POPSnapDto dto = rows.isEmpty() ? null : rows.get(0);
+        POPSnapDto dto = fetchSingleSnap(regionId, snapId);
         if (dto == null) {
-            return new ForecastSeries(null, null);
+            return emptyForecastSeries();
         }
-
         return new ForecastSeries(dto.getHourly(), dto.getDaily());
     }
 
+    /** 레포지토리 접근 */
+    private List<POPSnapDto> fetchSnaps(int regionId, List<Integer> snapIds) {
+        return climateSnapRepository.findPopInfoBySnapIdsAndRegionId(snapIds, regionId);
+    }
 
-    /** 판정용 입력 구조체  */
-    public record PopSeries(@Nullable PopSeries24 current,
-                            @Nullable PopSeries24 previous,
-                            int reportTimeGap, LocalDateTime curReportTime) {}
+    private POPSnapDto fetchSingleSnap(int regionId, int snapId) {
+        List<POPSnapDto> rows =
+                climateSnapRepository.findPopInfoBySnapIdsAndRegionId(List.of(snapId), regionId);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
 
-    /** 예보 요약용 구조체 (시간대 PopSeries24, 일자별 PopDailySeries7) */
-    public record ForecastSeries(@Nullable PopSeries24 hourly,
-                                 @Nullable PopDailySeries7 daily) {}
+    /** 스냅 선택 */
+    private POPSnapDto findSnapById(List<POPSnapDto> snaps, int snapId) {
+        for (POPSnapDto snap : snaps) {
+            if (snap.getSnapId() == snapId) {
+                return snap;
+            }
+        }
+        return null;
+    }
+
+    /** 발표시간 갭 계산 */
+    private int computeReportTimeGap(LocalDateTime previous, LocalDateTime current) {
+        if (previous == null || current == null) {
+            return 0;
+        }
+        long minutes = Duration.between(previous, current).toMinutes();
+        return (int) Math.round(minutes / 60.0);
+    }
+
+    /** 빈 결과 생성 */
+    private PopSeries emptyPopSeries() {
+        return new PopSeries(null, null, 0, null);
+    }
+    private ForecastSeries emptyForecastSeries() {
+        return new ForecastSeries(null, null);
+    }
 }

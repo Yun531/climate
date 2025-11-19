@@ -1,9 +1,6 @@
 package com.github.yun531.climate.service;
 
-import com.github.yun531.climate.domain.PopDailySeries7;
-import com.github.yun531.climate.domain.PopSeries24;
-import com.github.yun531.climate.domain.SnapKindEnum;
-import com.github.yun531.climate.dto.POPSnapDto;
+import com.github.yun531.climate.dto.*;
 import com.github.yun531.climate.repository.ClimateSnapRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -65,7 +62,7 @@ class ClimateServiceTest {
                 .thenReturn(List.of(prv, cur));
 
         // when
-        ClimateService.PopSeries series = climateService.loadPopSeries(regionId, curId, prvId);
+        PopSeries series = climateService.loadPopSeries(regionId, curId, prvId);
 
         // then
         assertThat(series.current()).isNotNull();
@@ -103,7 +100,7 @@ class ClimateServiceTest {
         when(climateSnapRepository.findPopInfoBySnapIdsAndRegionId(List.of(curId, prvId), regionId))
                 .thenReturn(List.of(onlyCur));
 
-        ClimateService.PopSeries series = climateService.loadPopSeries(regionId, curId, prvId);
+        PopSeries series = climateService.loadPopSeries(regionId, curId, prvId);
 
         assertThat(series.current()).isNull();
         assertThat(series.previous()).isNull();
@@ -169,7 +166,7 @@ class ClimateServiceTest {
                 .thenReturn(List.of(popSnapDto));
 
         // when
-        ClimateService.ForecastSeries fs = climateService.loadForecastSeries(regionId, snapId);
+        ForecastSeries fs = climateService.loadForecastSeries(regionId, snapId);
 
         // then
         assertThat(fs.hourly()).isNotNull();
@@ -198,7 +195,7 @@ class ClimateServiceTest {
         when(climateSnapRepository.findPopInfoBySnapIdsAndRegionId(List.of(snapId), regionId))
                 .thenReturn(List.of());   // 빈 리스트
 
-        ClimateService.ForecastSeries fs = climateService.loadForecastSeries(regionId, snapId);
+        ForecastSeries fs = climateService.loadForecastSeries(regionId, snapId);
 
         assertThat(fs.hourly()).isNull();
         assertThat(fs.daily()).isNull();
