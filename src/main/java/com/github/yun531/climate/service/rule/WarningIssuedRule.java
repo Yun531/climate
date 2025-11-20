@@ -47,7 +47,7 @@ public class WarningIssuedRule implements AlertRule {
         if (since == null) {
             return null;
         }
-        return since.minusMinutes(90);
+        return since.minusMinutes(90);   // todo: 특보알림 로직 변경시 수정해야 함
     }
 
     // 한 지역에 대한 이벤트 수집
