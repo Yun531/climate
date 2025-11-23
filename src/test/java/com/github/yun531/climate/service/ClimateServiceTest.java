@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.github.yun531.climate.util.TimeUtil.nowMinutes;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
@@ -93,7 +94,7 @@ class ClimateServiceTest {
         POPSnapDto onlyCur = new POPSnapDto();
         onlyCur.setSnapId(curId);
         onlyCur.setRegionId(regionId);
-        onlyCur.setReportTime(LocalDateTime.now());
+        onlyCur.setReportTime(nowMinutes());
         onlyCur.setHourly(new PopSeries24(rangeList(0, 24)));
 
         // 이전 스냅이 없는 경우 (cur 만 반환)
@@ -117,13 +118,13 @@ class ClimateServiceTest {
         POPSnapDto cur = new POPSnapDto();
         cur.setSnapId(curId);
         cur.setRegionId(regionId);
-        cur.setReportTime(LocalDateTime.now());
+        cur.setReportTime(nowMinutes());
         cur.setHourly(new PopSeries24(rangeList(0, 24)));
 
         POPSnapDto prv = new POPSnapDto();
         prv.setSnapId(prvId);
         prv.setRegionId(regionId);
-        prv.setReportTime(LocalDateTime.now().minusHours(3));
+        prv.setReportTime(nowMinutes().minusHours(3));
         prv.setHourly(new PopSeries24(rangeList(10, 24)));
 
         when(climateSnapRepository.findPopInfoBySnapIdsAndRegionId(List.of(curId, prvId), regionId))
@@ -145,7 +146,7 @@ class ClimateServiceTest {
         POPSnapDto popSnapDto = new POPSnapDto();
         popSnapDto.setSnapId(snapId);
         popSnapDto.setRegionId(regionId);
-        popSnapDto.setReportTime(LocalDateTime.now());
+        popSnapDto.setReportTime(nowMinutes());
 
         // hourly: 0..23
         popSnapDto.setHourly(new PopSeries24(rangeList(0, 24)));

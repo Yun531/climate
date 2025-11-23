@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static com.github.yun531.climate.util.TimeUtil.nowMinutes;
+
 @Component
 @RequiredArgsConstructor
 public class WarningIssuedRule implements AlertRule {
@@ -23,8 +25,28 @@ public class WarningIssuedRule implements AlertRule {
         return AlertTypeEnum.WARNING_ISSUED;
     }
 
+    // todo: 툭정 기상특보만 요청하는 함수 존재하지 않음, 지금은 모든 기상특보에 대해서 반환해줌
     @Override
     public List<AlertEvent> evaluate(List<Integer> regionIds, LocalDateTime since) {
+        if (regionIds == null || regionIds.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Integer, Map<WarningKind, WarningStateDto>> latestByRegion =
+                warningService.findLatestByRegionAndKind(regionIds);
+
+        LocalDateTime adjustedSince = adjustSince(since);
+
+        List<AlertEvent> out = new ArrayList<>();
+        for (int regionId : regionIds) {
+            Map<WarningKind, WarningStateDto> byKind = latestByRegion.get(regionId);
+            collectEventsForRegion(regionId, byKind, adjustedSince, out);
+        }
+        return out;
+    }
+
+
+    public List<AlertEvent> evaluate(List<Integer> regionIds, WarningKind warningKind, LocalDateTime since){
         if (regionIds == null || regionIds.isEmpty()) {
             return List.of();
         }
@@ -85,7 +107,7 @@ public class WarningIssuedRule implements AlertRule {
     // DTO → AlertEvent 변환
     private AlertEvent toAlertEvent(int regionId, WarningStateDto state) {
         LocalDateTime occurredAt =
-                (state.getUpdatedAt() != null) ? state.getUpdatedAt() : LocalDateTime.now();
+                (state.getUpdatedAt() != null) ? state.getUpdatedAt() : nowMinutes();
 
         Map<String, Object> payload = Map.of(
                 "_srcRule", "WarningIssuedRule",

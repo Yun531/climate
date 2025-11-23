@@ -14,6 +14,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.github.yun531.climate.util.TimeUtil.nowMinutes;
+
 @Component
 @RequiredArgsConstructor
 public class RainForecastRule implements AlertRule {
@@ -46,7 +48,7 @@ public class RainForecastRule implements AlertRule {
             AlertEvent event = new AlertEvent(
                                         AlertTypeEnum.RAIN_FORECAST,
                                         regionId,
-                                        LocalDateTime.now(),
+                                        nowMinutes(),
                                         payload
                                 );
             out.add(event);

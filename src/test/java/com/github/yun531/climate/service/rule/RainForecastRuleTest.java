@@ -17,6 +17,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import static com.github.yun531.climate.util.TimeUtil.nowMinutes;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
@@ -98,7 +99,7 @@ class RainForecastRuleTest {
         RainForecastRule rule = new RainForecastRule(climateService);
 
         // when
-        var events = rule.evaluate(List.of(1), LocalDateTime.now());
+        var events = rule.evaluate(List.of(1), nowMinutes());
 
         // then
         assertThat(events).hasSize(1);

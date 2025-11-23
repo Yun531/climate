@@ -41,8 +41,8 @@ import static org.mockito.Mockito.*;
 @Sql(statements = {
         // --- 초기화
         "SET FOREIGN_KEY_CHECKS = 0",
-        "TRUNCATE TABLE climate_snap",
-        "TRUNCATE TABLE warning_state",
+        "DELETE FROM climate_snap",
+        "DELETE FROM warning_state",
         "SET FOREIGN_KEY_CHECKS = 1",
 
         // --- climate_snap 시드

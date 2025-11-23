@@ -10,10 +10,10 @@ import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import static com.github.yun531.climate.util.TimeUtil.nowMinutes;
 
 @Service
 @RequiredArgsConstructor
@@ -60,7 +60,7 @@ public class NotificationService {
 
     /** since 가 null이면 현재 시각을 사용 */
     private LocalDateTime resolveSince(@Nullable LocalDateTime since) {
-        return (since != null) ? since : LocalDateTime.now();
+        return (since != null) ? since : nowMinutes();
     }
 
     /** receiveWarnings 플래그 기반 기본 타입 셋 */

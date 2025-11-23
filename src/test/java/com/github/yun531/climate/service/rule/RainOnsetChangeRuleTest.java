@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import static com.github.yun531.climate.util.TimeUtil.nowMinutes;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
@@ -46,7 +47,7 @@ class RainOnsetChangeRuleTest {
         assertThat(e.regionId()).isEqualTo(101L);
         assertThat((Integer) e.payload().get("hour")).isEqualTo(5);
         assertThat((Integer) e.payload().get("pop")).isEqualTo(th);
-        assertThat(e.occurredAt()).isBeforeOrEqualTo(LocalDateTime.now());
+        assertThat(e.occurredAt()).isBeforeOrEqualTo(nowMinutes());
     }
 
     @Test

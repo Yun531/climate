@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Transactional
 @Sql(statements = {
         "SET FOREIGN_KEY_CHECKS = 0",
-        "TRUNCATE TABLE climate_snap",
+        "DELETE FROM climate_snap",
         "SET FOREIGN_KEY_CHECKS = 1",
         "insert into climate_snap values " +
                 "(10, 1, '2025-11-18 08:00:00'," +
