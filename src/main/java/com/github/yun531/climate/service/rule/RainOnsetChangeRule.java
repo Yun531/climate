@@ -3,6 +3,8 @@ package com.github.yun531.climate.service.rule;
 import com.github.yun531.climate.dto.PopSeries;
 import com.github.yun531.climate.dto.PopSeries24;
 import com.github.yun531.climate.service.ClimateService;
+import com.github.yun531.climate.util.CacheEntry;
+import com.github.yun531.climate.util.RegionCache;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -10,7 +12,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 @RequiredArgsConstructor
@@ -22,11 +23,7 @@ public class RainOnsetChangeRule implements AlertRule {
     private final ClimateService climateService;
 
     /** 지역별 캐시: 계산결과 + 계산시각 */
-    private final Map<Integer, CacheEntry> cache = new ConcurrentHashMap<>();
-    private record CacheEntry(
-            List<AlertEvent> events,
-            LocalDateTime computedAt
-    ) {}
+    private final RegionCache<List<AlertEvent>> cache = new RegionCache<>();
 
     @Override
     public AlertTypeEnum supports() {
@@ -42,42 +39,24 @@ public class RainOnsetChangeRule implements AlertRule {
         List<AlertEvent> out = new ArrayList<>();
 
         for (int regionId : regionIds) {
-            CacheEntry entry = getOrComputeEntry(regionId, since);
-            if (entry == null) continue;
+            CacheEntry<List<AlertEvent>> entry =
+                    cache.getOrComputeSinceBased(
+                            regionId,
+                            since,
+                            RECOMPUTE_THRESHOLD_MINUTES,
+                            () -> computeForRegion(regionId)    // 람다(함수 객체)
+                    );
 
-            List<AlertEvent> events = entry.events();
-            if (events == null || events.isEmpty()) continue;
-
-            out.addAll(events);
+            if (entry == null || entry.value() == null || entry.value().isEmpty()) {
+                continue;
+            }
+            out.addAll(entry.value());
         }
         return out;
     }
 
-    // 캐시 조회/재계산
-    private CacheEntry getOrComputeEntry(int regionId, LocalDateTime since) {
-        CacheEntry entry = cache.get(regionId);
-
-        if (needsRecompute(entry, since)) {
-            entry = computeForRegion(regionId);
-            cache.put(regionId, entry);
-        }
-        return entry;
-    }
-
-    /**
-     * since == null 이면 무조건 재계산,
-     * 아니면 since - RECOMPUTE_THRESHOLD_MINUTES 보다 computedAt 가 이전이면 재계산
-     */
-    private boolean needsRecompute(CacheEntry entry, LocalDateTime since) {
-        if (since == null) return true;
-        if (entry == null || entry.computedAt() == null) return true;
-
-        LocalDateTime floor = since.minusMinutes(RECOMPUTE_THRESHOLD_MINUTES);
-        return entry.computedAt().isBefore(floor);
-    }
-
     // 한 지역에 대한 비 시작 시점 계산
-    private CacheEntry computeForRegion(int regionId) {
+    private CacheEntry<List<AlertEvent>> computeForRegion(int regionId) {
         PopSeries series = climateService.loadDefaultPopSeries(regionId);
 
         if (!isValidSeries(series)) {
@@ -87,7 +66,7 @@ public class RainOnsetChangeRule implements AlertRule {
         LocalDateTime computedAt = series.curReportTime();
         List<AlertEvent> events = detectRainOnsetEvents(regionId, series, computedAt);
 
-        return new CacheEntry(List.copyOf(events), computedAt);
+        return new CacheEntry<>(List.copyOf(events), computedAt);
     }
 
     private boolean isValidSeries(PopSeries series) {
@@ -96,8 +75,8 @@ public class RainOnsetChangeRule implements AlertRule {
                 && series.previous() != null;
     }
 
-    private CacheEntry createEmptyCacheEntry() {
-        return new CacheEntry(List.of(), null);
+    private CacheEntry<List<AlertEvent>> createEmptyCacheEntry() {
+        return new CacheEntry<>(List.of(), null);
     }
 
     // 시계열 비교 및 이벤트 생성
@@ -164,6 +143,6 @@ public class RainOnsetChangeRule implements AlertRule {
     }
 
     /** 캐시 무효화 */
-    public void invalidate(int regionId) { cache.remove(regionId); }
-    public void invalidateAll() { cache.clear(); }
+    public void invalidate(int regionId) { cache.invalidate(regionId); }
+    public void invalidateAll() { cache.invalidateAll(); }
 }

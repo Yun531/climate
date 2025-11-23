@@ -4,6 +4,8 @@ package com.github.yun531.climate.service.rule;
 import com.github.yun531.climate.dto.WarningKind;
 import com.github.yun531.climate.dto.WarningStateDto;
 import com.github.yun531.climate.service.WarningService;
+import com.github.yun531.climate.util.CacheEntry;
+import com.github.yun531.climate.util.RegionCache;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -20,51 +22,59 @@ public class WarningIssuedRule implements AlertRule {
 
     private final WarningService warningService;
 
+    /** 캐시 TTL (분 단위) */
+    private static final int CACHE_TTL_MINUTES = 45;
+    /** 지역별 캐시: kind → WarningStateDto 맵 + 계산시각 */
+    private final RegionCache<Map<WarningKind, WarningStateDto>> cache = new RegionCache<>();
+
     @Override
     public AlertTypeEnum supports() {
         return AlertTypeEnum.WARNING_ISSUED;
     }
 
-    // todo: 툭정 기상특보만 요청하는 함수 존재하지 않음, 지금은 모든 기상특보에 대해서 반환해줌
+    // todo: 툭정 기상특보만 요청하는 컨트롤러 존재하지 않음, 지금은 모든 기상특보에 대해서 반환해줌
+    // AlertRule 기본 evaluate: 모든 kind 대상
     @Override
     public List<AlertEvent> evaluate(List<Integer> regionIds, LocalDateTime since) {
+        return evaluate(regionIds, null, since);
+    }
+
+    // 특정 기상특보 종류만 요청하는 오버로드
+    public List<AlertEvent> evaluate(List<Integer> regionIds,
+                                     WarningKind filterKind,
+                                     LocalDateTime since) {
         if (regionIds == null || regionIds.isEmpty()) {
             return List.of();
         }
 
-        Map<Integer, Map<WarningKind, WarningStateDto>> latestByRegion =
-                warningService.findLatestByRegionAndKind(regionIds);
-
+        // 캐시 TTL 기준 시각: "지금"
+        LocalDateTime cacheSince = nowMinutes();
+        // 특보 발효 시각 판정용 since (90분 보정)
         LocalDateTime adjustedSince = adjustSince(since);
 
         List<AlertEvent> out = new ArrayList<>();
+
         for (int regionId : regionIds) {
-            Map<WarningKind, WarningStateDto> byKind = latestByRegion.get(regionId);
-            collectEventsForRegion(regionId, byKind, adjustedSince, out);
+            CacheEntry<Map<WarningKind, WarningStateDto>> entry =
+                    cache.getOrComputeSinceBased(
+                            regionId,
+                            cacheSince,          // now 기준 TTL
+                            CACHE_TTL_MINUTES,
+                            () -> loadLatestForRegion(regionId)
+                    );
+
+            Map<WarningKind, WarningStateDto> byKind =
+                    (entry != null) ? entry.value() : null;
+
+            collectEventsForRegion(regionId, byKind, filterKind, adjustedSince, out);
         }
         return out;
     }
 
-
-    public List<AlertEvent> evaluate(List<Integer> regionIds, WarningKind warningKind, LocalDateTime since){
-        if (regionIds == null || regionIds.isEmpty()) {
-            return List.of();
-        }
-
-        Map<Integer, Map<WarningKind, WarningStateDto>> latestByRegion =
-                warningService.findLatestByRegionAndKind(regionIds);
-
-        LocalDateTime adjustedSince = adjustSince(since);
-
-        List<AlertEvent> out = new ArrayList<>();
-        for (int regionId : regionIds) {
-            Map<WarningKind, WarningStateDto> byKind = latestByRegion.get(regionId);
-            collectEventsForRegion(regionId, byKind, adjustedSince, out);
-        }
-        return out;
-    }
-
-    /** 특보 발효 시각과의 시차 보정을 위해 since 를 90분 당겨서 사용 */
+    /**
+     * 특보 발효 시각과의 시차 보정을 위해 since 를 90분 당겨서 사용
+     * 요청 시점에서부터 90분 이전까지의 특보 정보를 새로 발효된 것으로 간주
+     * */
     private LocalDateTime adjustSince(LocalDateTime since) {
         if (since == null) {
             return null;
@@ -72,9 +82,21 @@ public class WarningIssuedRule implements AlertRule {
         return since.minusMinutes(90);   // todo: 특보알림 로직 변경시 수정해야 함
     }
 
-    // 한 지역에 대한 이벤트 수집
+    /** 한 지역에 대한 최신 특보 상태를 DB에서 로드하고 CacheEntry 로 래핑 */
+    private CacheEntry<Map<WarningKind, WarningStateDto>> loadLatestForRegion(int regionId) {
+        Map<Integer, Map<WarningKind, WarningStateDto>> latestByRegion =
+                warningService.findLatestByRegionAndKind(List.of(regionId));
+
+        Map<WarningKind, WarningStateDto> byKind =
+                latestByRegion.getOrDefault(regionId, Map.of());
+
+        return new CacheEntry<>(byKind, nowMinutes());
+    }
+
+    // 한 지역에 대한 이벤트 수집 (필요 시 특정 kind 필터링)
     private void collectEventsForRegion(int regionId,
                                         Map<WarningKind, WarningStateDto> byKind,
+                                        WarningKind filterKind,
                                         LocalDateTime adjustedSince,
                                         List<AlertEvent> out) {
         if (byKind == null || byKind.isEmpty()) {
@@ -82,6 +104,11 @@ public class WarningIssuedRule implements AlertRule {
         }
 
         for (Map.Entry<WarningKind, WarningStateDto> entry : byKind.entrySet()) {
+            WarningKind kind = entry.getKey();
+            if (filterKind != null && kind != filterKind) {
+                continue;
+            }
+
             WarningStateDto state = entry.getValue();
             if (!isNewWarning(state, adjustedSince)) {
                 continue;

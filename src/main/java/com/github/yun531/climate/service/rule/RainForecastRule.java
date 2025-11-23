@@ -5,6 +5,8 @@ import com.github.yun531.climate.dto.PopDailySeries7;
 import com.github.yun531.climate.dto.PopSeries24;
 import com.github.yun531.climate.dto.SnapKindEnum;
 import com.github.yun531.climate.service.ClimateService;
+import com.github.yun531.climate.util.CacheEntry;
+import com.github.yun531.climate.util.RegionCache;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -22,8 +24,13 @@ public class RainForecastRule implements AlertRule {
 
     private final ClimateService climateService;
 
-    private static final int TH = 60;
     private static final int SNAP_CURRENT = SnapKindEnum.SNAP_CURRENT.getCode();
+    private static final int TH = 60;
+    /** since 기준으로 해당 분(시간) 보다 오래된 계산 결과면 재계산 */
+    private static final int RECOMPUTE_THRESHOLD_MINUTES = 165;
+
+    /** 지역별 캐시: RAIN_FORECAST AlertEvent 리스트 + 계산시각 */
+    private final RegionCache<List<AlertEvent>> cache = new RegionCache<>();
 
     @Override
     public AlertTypeEnum supports() {
@@ -34,26 +41,47 @@ public class RainForecastRule implements AlertRule {
     public List<AlertEvent> evaluate(List<Integer> regionIds, LocalDateTime since) {
         if (regionIds == null || regionIds.isEmpty()) return List.of();
 
-        List<AlertEvent> out = new ArrayList<>(regionIds.size());
+        List<AlertEvent> out = new ArrayList<>();
 
         for (int regionId : regionIds) {
-            ForecastSeries fs = loadForecastSeries(regionId);
-            if (fs == null) continue;
+            CacheEntry<List<AlertEvent>> entry =
+                    cache.getOrComputeSinceBased(
+                            regionId,
+                            since,
+                            RECOMPUTE_THRESHOLD_MINUTES,
+                            () -> computeForRegion(regionId)
+                    );
 
-            List<List<Integer>> hourlyParts = buildHourlyParts(fs);
-            List<List<Integer>> dayParts    = buildDayParts(fs);
-
-            Map<String, Object> payload = createPayload(hourlyParts, dayParts);
-
-            AlertEvent event = new AlertEvent(
-                                        AlertTypeEnum.RAIN_FORECAST,
-                                        regionId,
-                                        nowMinutes(),
-                                        payload
-                                );
-            out.add(event);
+            if (entry == null || entry.value() == null || entry.value().isEmpty()) {
+                continue;
+            }
+            out.addAll(entry.value());
         }
         return out;
+    }
+
+    // 한 지역에 대한 비 예보 계산 → CacheEntry로 반환
+    private CacheEntry<List<AlertEvent>> computeForRegion(int regionId) {
+        ForecastSeries fs = loadForecastSeries(regionId);
+        if (fs == null) {
+            return new CacheEntry<>(List.of(), null);
+        }
+
+        List<List<Integer>> hourlyParts = buildHourlyParts(fs);
+        List<List<Integer>> dayParts    = buildDayParts(fs);
+
+        Map<String, Object> payload = createPayload(hourlyParts, dayParts);
+
+        LocalDateTime computedAt = nowMinutes();
+        AlertEvent event = new AlertEvent(
+                AlertTypeEnum.RAIN_FORECAST,
+                regionId,
+                computedAt,
+                payload
+        );
+
+        List<AlertEvent> events = List.of(event);
+        return new CacheEntry<>(events, computedAt);
     }
 
     private ForecastSeries loadForecastSeries(int regionId) {
