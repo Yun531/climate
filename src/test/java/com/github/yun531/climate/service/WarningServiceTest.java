@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+import static com.github.yun531.climate.util.TimeUtil.nowMinutes;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
@@ -25,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Transactional
 @Sql(statements = {
         "SET FOREIGN_KEY_CHECKS = 0",
-        "TRUNCATE TABLE warning_state",
+        "DELETE FROM warning_state",
         "SET FOREIGN_KEY_CHECKS = 1"
 })
 class WarningServiceTest {
@@ -86,7 +87,7 @@ class WarningServiceTest {
         int regionId = 1;
 
         WarningStateDto nullTime = new WarningStateDto(1, WarningKind.RAIN, WarningLevel.ADVISORY, null);
-        assertThat(service.isNewlyIssuedSince(nullTime, LocalDateTime.now())).isFalse();
+        assertThat(service.isNewlyIssuedSince(nullTime, nowMinutes())).isFalse();
 
         WarningStateDto same = new WarningStateDto(
                 regionId, WarningKind.RAIN, WarningLevel.ADVISORY,

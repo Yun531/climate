@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Transactional
 @Sql(statements = {
         "SET FOREIGN_KEY_CHECKS = 0",
-        "TRUNCATE TABLE warning_state",
+        "DELETE FROM warning_state",
         "SET FOREIGN_KEY_CHECKS = 1"
 })
 class WarningStateRepositoryTest {
