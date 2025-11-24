@@ -149,6 +149,7 @@ public class NotificationService {
         return String.valueOf(v);
     }
 
+    /** evnet 정렬: 타입(ordinal) → 지역ID → 타입 이름 → 발생시각 순 */
     private void sortEvents(List<AlertEvent> events) {
         events.sort(Comparator
                 .comparing(AlertEvent::type,

@@ -56,4 +56,27 @@ public class AlertController {
         return ResponseEntity.ok(out);
     }
 
+    @GetMapping("/summary")
+    @Operation(
+            summary = "단기 예보 + 기상특보 통합 알림",
+            description = "3시간 단기예보 변동사항(RAIN_ONSET)과 기상특보 변동사항(WARNING_ISSUED)을 통합 조회"
+    )
+    public ResponseEntity<List<AlertEvent>> getSummary(
+            @RequestParam List<Integer> regionIds,
+            @RequestParam(value = "warningKinds", required = false) List<WarningKind> warningKinds
+    ) {
+        Set<AlertTypeEnum> types = EnumSet.of(
+                AlertTypeEnum.RAIN_ONSET,
+                AlertTypeEnum.WARNING_ISSUED
+        );
+
+        Set<WarningKind> filterKinds = null;
+        if (warningKinds != null && !warningKinds.isEmpty()) {
+            filterKinds = EnumSet.copyOf(warningKinds);
+        }
+
+        List<AlertEvent> out = notificationService.generate(regionIds, types, null, filterKinds);
+        return ResponseEntity.ok(out);
+    }
+
 }
