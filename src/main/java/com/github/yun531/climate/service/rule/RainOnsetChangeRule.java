@@ -79,7 +79,7 @@ public class RainOnsetChangeRule implements AlertRule {
         return new CacheEntry<>(List.of(), null);
     }
 
-    // 시계열 비교 및 이벤트 생성
+    /** 시계열 비교 및 이벤트 생성 */
     private List<AlertEvent> detectRainOnsetEvents(int regionId,
                                                    PopSeries series,
                                                    LocalDateTime computedAt) {
@@ -97,6 +97,14 @@ public class RainOnsetChangeRule implements AlertRule {
         for (int h = 0; h <= maxH; h++) {
             if (isRainOnset(cur, prv, gap, h)) {
                 events.add(createRainOnsetEvent(regionId, computedAt, h, cur.get(h)));
+            }
+        }
+
+        int curLimit = cur.size() - 1;
+        for (int h = maxH + 1; h <= curLimit; h++) {
+            if (isRain(cur, h)) {
+                int curPop = cur.get(h);
+                events.add(createRainOnsetEvent(regionId, computedAt, h, curPop));
             }
         }
         return events;
@@ -123,6 +131,12 @@ public class RainOnsetChangeRule implements AlertRule {
         boolean nowRain    = curPop  >= RAIN_TH;
 
         return wasNotRain && nowRain;
+    }
+
+    /** 현재 시계열에서 h 시점에 비라고 볼 수 있는지 여부 */
+    private boolean isRain(PopSeries24 series, int hour) {
+        int pop = series.get(hour);
+        return pop >= RAIN_TH;
     }
 
     private AlertEvent createRainOnsetEvent(int regionId,
