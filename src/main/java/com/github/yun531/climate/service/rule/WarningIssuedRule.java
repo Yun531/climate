@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.github.yun531.climate.util.TimeUtil.nowMinutes;
 
@@ -32,7 +33,6 @@ public class WarningIssuedRule implements AlertRule {
         return AlertTypeEnum.WARNING_ISSUED;
     }
 
-    // todo: 툭정 기상특보만 요청하는 컨트롤러 존재하지 않음, 지금은 모든 기상특보에 대해서 반환해줌
     // AlertRule 기본 evaluate: 모든 kind 대상
     @Override
     public List<AlertEvent> evaluate(List<Integer> regionIds, LocalDateTime since) {
@@ -41,7 +41,7 @@ public class WarningIssuedRule implements AlertRule {
 
     // 특정 기상특보 종류만 요청하는 오버로드
     public List<AlertEvent> evaluate(List<Integer> regionIds,
-                                     WarningKind filterKind,
+                                     Set<WarningKind> filterKinds,
                                      LocalDateTime since) {
         if (regionIds == null || regionIds.isEmpty()) {
             return List.of();
@@ -66,7 +66,7 @@ public class WarningIssuedRule implements AlertRule {
             Map<WarningKind, WarningStateDto> byKind =
                     (entry != null) ? entry.value() : null;
 
-            collectEventsForRegion(regionId, byKind, filterKind, adjustedSince, out);
+            collectEventsForRegion(regionId, byKind, filterKinds, adjustedSince, out);
         }
         return out;
     }
@@ -96,7 +96,7 @@ public class WarningIssuedRule implements AlertRule {
     // 한 지역에 대한 이벤트 수집 (필요 시 특정 kind 필터링)
     private void collectEventsForRegion(int regionId,
                                         Map<WarningKind, WarningStateDto> byKind,
-                                        WarningKind filterKind,
+                                        Set<WarningKind> filterKinds,
                                         LocalDateTime adjustedSince,
                                         List<AlertEvent> out) {
         if (byKind == null || byKind.isEmpty()) {
@@ -105,7 +105,8 @@ public class WarningIssuedRule implements AlertRule {
 
         for (Map.Entry<WarningKind, WarningStateDto> entry : byKind.entrySet()) {
             WarningKind kind = entry.getKey();
-            if (filterKind != null && kind != filterKind) {
+            if (filterKinds != null && !filterKinds.isEmpty()
+                    && !filterKinds.contains(kind)) {
                 continue;
             }
 

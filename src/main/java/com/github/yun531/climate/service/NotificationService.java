@@ -1,10 +1,10 @@
 package com.github.yun531.climate.service;
 
 import com.github.yun531.climate.dto.WarningKind;
-import com.github.yun531.climate.dto.WarningLevel;
 import com.github.yun531.climate.service.rule.AlertEvent;
 import com.github.yun531.climate.service.rule.AlertRule;
 import com.github.yun531.climate.service.rule.AlertTypeEnum;
+import com.github.yun531.climate.service.rule.WarningIssuedRule;
 import lombok.RequiredArgsConstructor;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
@@ -23,80 +23,91 @@ public class NotificationService {
 
     /** default: RAIN_ONSET만 제공 */
     public List<AlertEvent> generate(List<Integer> regionIds,
-                                 boolean receiveWarnings,
-                                 @Nullable LocalDateTime since) {
+                                     boolean receiveWarnings,
+                                     @Nullable LocalDateTime since) {
 
-        LocalDateTime effectiveSince = resolveSince(since);
+        LocalDateTime effectiveSince = sinceOrNow(since);
         Set<AlertTypeEnum> enabled   = defaultEnabledTypes(receiveWarnings);
 
-        return generateInternal(regionIds, enabled, effectiveSince);
+        return generateInternal(regionIds, enabled, effectiveSince, null);
     }
 
+    /** 특정 AlertType 들에 대해서 요청 */
     public List<AlertEvent> generate(List<Integer> regionIds,
-                                 @Nullable Set<AlertTypeEnum> enabledTypes,
-                                 @Nullable LocalDateTime since) {
+                                     @Nullable Set<AlertTypeEnum> enabledTypes,
+                                     @Nullable LocalDateTime since) {
 
-        LocalDateTime effectiveSince = resolveSince(since);
+        LocalDateTime effectiveSince = sinceOrNow(since);
         Set<AlertTypeEnum> enabled   = normalizeEnabledTypes(enabledTypes);
 
-        return generateInternal(regionIds, enabled, effectiveSince);
+        return generateInternal(regionIds, enabled, effectiveSince, null);
+    }
+
+    /**
+     * enabledTypes + WarningKind 필터를 함께 지정 가능한 버전.
+     * - enabledTypes 에 WARNING_ISSUED 가 포함돼 있을 때만 filterKind 적용
+     * - 다른 타입(RAIN_ONSET, RAIN_FORECAST 등)은 그대로 동작
+     */
+    public List<AlertEvent> generate(List<Integer> regionIds,
+                                     @Nullable Set<AlertTypeEnum> enabledTypes,
+                                     @Nullable LocalDateTime since,
+                                     @Nullable Set<WarningKind> filterKinds) {
+
+        LocalDateTime effectiveSince = sinceOrNow(since);
+        Set<AlertTypeEnum> enabled   = normalizeEnabledTypes(enabledTypes);
+
+        return generateInternal(regionIds, enabled, effectiveSince, filterKinds);
     }
 
     private List<AlertEvent> generateInternal(List<Integer> regionIds,
-                                          Set<AlertTypeEnum> enabledTypes,
-                                          LocalDateTime since) {
+                                              Set<AlertTypeEnum> enabledTypes,
+                                              LocalDateTime since,
+                                              @Nullable Set<WarningKind> filterKinds) {
 
         if (regionIds == null || regionIds.isEmpty()) {
             return List.of();
         }
 
         List<Integer> targetRegions = limitRegions(regionIds);
-        List<AlertEvent> events     = collectEvents(targetRegions, enabledTypes, since);
+        List<AlertEvent> events     = collectEvents(targetRegions, enabledTypes, since, filterKinds);
         List<AlertEvent> deduped    = deduplicate(events);
         sortEvents(deduped);
 
         return deduped;
     }
 
-    /** since 가 null이면 현재 시각을 사용 */
-    private LocalDateTime resolveSince(@Nullable LocalDateTime since) {
-        return (since != null) ? since : nowMinutes();
-    }
-
-    /** receiveWarnings 플래그 기반 기본 타입 셋 */
-    private Set<AlertTypeEnum> defaultEnabledTypes(boolean receiveWarnings) {
-        Set<AlertTypeEnum> enabled = EnumSet.of(AlertTypeEnum.RAIN_ONSET);
-        if (receiveWarnings) {
-            enabled.add(AlertTypeEnum.WARNING_ISSUED);
-        }
-        return enabled;
-    }
-
-    /** null/빈 값이면 기본(RAIN_ONSET)으로 교체, 아니면 복사 */
-    private Set<AlertTypeEnum> normalizeEnabledTypes(@Nullable Set<AlertTypeEnum> enabledTypes) {
-        if (enabledTypes == null || enabledTypes.isEmpty()) {
-            return EnumSet.of(AlertTypeEnum.RAIN_ONSET);
-        }
-        return EnumSet.copyOf(enabledTypes);
-    }
-
-    /** 지역 최대 3개 제한 */
-    private List<Integer> limitRegions(List<Integer> regionIds) {
-        if (regionIds.size() <= 3) {
-            return regionIds;
-        }
-        return regionIds.subList(0, 3);
-    }
-
     /** 룰 실행 / 이벤트 수집 */
     private List<AlertEvent> collectEvents(List<Integer> targetRegions,
                                            Set<AlertTypeEnum> enabledTypes,
-                                           LocalDateTime since) {
+                                           LocalDateTime since,
+                                           @Nullable Set<WarningKind> filterKinds) {
 
         return rules.stream()
                 .filter(r -> enabledTypes.contains(r.supports()))
-                .flatMap(r -> r.evaluate(targetRegions, since).stream())
+                .flatMap(r -> evaluateRuleWithFilter(r, targetRegions, since, filterKinds).stream())
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * filterKind 가 주어졌을 때:
+     *  - WARNING_ISSUED 를 지원하는 WarningIssuedRule 이면
+     *      → WarningIssuedRule.evaluate(regionIds, filterKind, since) 호출
+     *  - 그 외에는 기본 AlertRule.evaluate(regionIds, since) 호출
+     */
+    private List<AlertEvent> evaluateRuleWithFilter(AlertRule rule,
+                                                    List<Integer> targetRegions,
+                                                    LocalDateTime since,
+                                                    @Nullable Set<WarningKind> filterKinds) {
+
+        if (filterKinds != null
+                && rule.supports() == AlertTypeEnum.WARNING_ISSUED
+                && rule instanceof WarningIssuedRule wir) {
+            // 특정 기상특보 종류만 필터링
+            return wir.evaluate(targetRegions, filterKinds, since);
+        }
+
+        // 나머지 룰은 기존 로직 유지
+        return rule.evaluate(targetRegions, since);
     }
 
     /** 중복 제거 / 정렬 / 문자열 변환 */
@@ -145,6 +156,36 @@ public class NotificationService {
                 .thenComparing(AlertEvent::regionId, Comparator.nullsLast(Comparator.naturalOrder()))
                 .thenComparing(event -> event.type().name())
                 .thenComparing(AlertEvent::occurredAt, Comparator.nullsLast(Comparator.naturalOrder())));
+    }
+
+    /** since 가 null이면 현재 시각을 사용 */
+    private LocalDateTime sinceOrNow(@Nullable LocalDateTime since) {
+        return (since != null) ? since : nowMinutes();
+    }
+
+    /** receiveWarnings 플래그 기반 기본 타입 셋 */
+    private Set<AlertTypeEnum> defaultEnabledTypes(boolean receiveWarnings) {
+        Set<AlertTypeEnum> enabled = EnumSet.of(AlertTypeEnum.RAIN_ONSET);
+        if (receiveWarnings) {
+            enabled.add(AlertTypeEnum.WARNING_ISSUED);
+        }
+        return enabled;
+    }
+
+    /** null/빈 값이면 기본(RAIN_ONSET)으로 교체, 아니면 복사 */
+    private Set<AlertTypeEnum> normalizeEnabledTypes(@Nullable Set<AlertTypeEnum> enabledTypes) {
+        if (enabledTypes == null || enabledTypes.isEmpty()) {
+            return EnumSet.of(AlertTypeEnum.RAIN_ONSET);
+        }
+        return EnumSet.copyOf(enabledTypes);
+    }
+
+    /** 지역 최대 3개 제한 */
+    private List<Integer> limitRegions(List<Integer> regionIds) {
+        if (regionIds.size() <= 3) {
+            return regionIds;
+        }
+        return regionIds.subList(0, 3);
     }
 
 

@@ -34,11 +34,11 @@ public class RegionCache<T> {
             int thresholdMinutes,
             Supplier<CacheEntry<T>> computer      // 람다(함수 객체)
     ) {
-        CacheEntry<T> entry = map.get(regionId);
+        CacheEntry<T> entry = get(regionId);
 
         if (needsRecomputeSinceBased(entry, since, thresholdMinutes)) {
             entry = computer.get();
-            map.put(regionId, entry);
+            putEntry(regionId, entry);
         }
         return entry;
     }

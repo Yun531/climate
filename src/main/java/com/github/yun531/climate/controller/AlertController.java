@@ -1,5 +1,6 @@
 package com.github.yun531.climate.controller;
 
+import com.github.yun531.climate.dto.WarningKind;
 import com.github.yun531.climate.service.NotificationService;
 import com.github.yun531.climate.service.rule.AlertEvent;
 import com.github.yun531.climate.service.rule.AlertTypeEnum;
@@ -40,10 +41,18 @@ public class AlertController {
 
     @GetMapping("/warning")
     @Operation(summary = "기상특보 변동사항 알림", description = "1시간마다 발표되는 기상특보의 변동사항에 대한 알림")
-    public ResponseEntity<List<AlertEvent>> getWarning(@RequestParam List<Integer> regionIds) {
+    public ResponseEntity<List<AlertEvent>> getWarning(
+            @RequestParam List<Integer> regionIds,
+            @RequestParam(value = "kinds", required = false) List<WarningKind> kinds
+    ) {
         Set<AlertTypeEnum> types = EnumSet.of(AlertTypeEnum.WARNING_ISSUED);
-        List<AlertEvent> out = notificationService.generate(regionIds, types, null);
 
+        Set<WarningKind> filterKinds = null;
+        if (kinds != null && !kinds.isEmpty()) {
+            filterKinds = EnumSet.copyOf(kinds);
+        }
+
+        List<AlertEvent> out = notificationService.generate(regionIds, types, null, filterKinds);
         return ResponseEntity.ok(out);
     }
 
