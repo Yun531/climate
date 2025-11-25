@@ -1,7 +1,9 @@
 package com.github.yun531.climate.service;
 
+import com.github.yun531.climate.dto.WarningKind;
 import com.github.yun531.climate.service.rule.AlertEvent;
 import com.github.yun531.climate.service.rule.AlertTypeEnum;
+import com.github.yun531.climate.service.rule.RainForecastRule;
 import com.github.yun531.climate.service.rule.RainOnsetChangeRule;
 import com.github.yun531.climate.service.rule.WarningIssuedRule;
 import org.junit.jupiter.api.DisplayName;
@@ -48,15 +50,15 @@ import static org.mockito.Mockito.*;
         // --- climate_snap 시드
         "INSERT INTO climate_snap VALUES " +
                 "(10, 1,  '2025-11-18 08:00:00'," +
-                    " 1,2,3,4,5,6,7,8,9,10,11,12,13,12,11,10,9,8,7,6,5,4,3,2," +
-                    "  5,5, 7,7, 8,8, 7,7, 6,6, 5,5, 6,6," +
-                    "  50,40,50,60,60, 60,40,30,20,10, 0,0,10,20,20, 30,40,60,10,0, 20,40,70,40," +
-                    "  70,40, 40,40, 30,30, 40,40, 30,60, 50,50, 40,40)," +
+                " 1,2,3,4,5,6,7,8,9,10,11,12,13,12,11,10,9,8,7,6,5,4,3,2," +
+                "  5,5, 7,7, 8,8, 7,7, 6,6, 5,5, 6,6," +
+                "  50,40,50,60,60, 60,40,30,20,10, 0,0,10,20,20, 30,40,60,10,0, 20,40,70,40," +
+                "  70,40, 40,40, 30,30, 40,40, 30,60, 50,50, 40,40)," +
                 "(1, 1, '2025-11-18 11:00:00'," +
-                    "  1,2,3,4,5,6,7,8,9,10,11,12,13,12,11,10,9,8,7,6,5,4,3,2," +
-                    "  5,5, 7,7, 8,8, 7,7, 6,6, 5,5, 6,6," +
-                    "  40,50,60,60,60, 60,30,20,10,0, 0,10,20,20,30, 60,60,60,0,20, 40,70,40,60," +
-                    "  30,30, 40,40, 30,60, 50,50, 40,40, 20,20, 0,0)",
+                "  1,2,3,4,5,6,7,8,9,10,11,12,13,12,11,10,9,8,7,6,5,4,3,2," +
+                "  5,5, 7,7, 8,8, 7,7, 6,6, 5,5, 6,6," +
+                "  40,50,60,60,60, 60,30,20,10,0, 0,10,20,20,30, 60,60,60,0,20, 40,70,40,60," +
+                "  30,30, 40,40, 30,60, 50,50, 40,40, 20,20, 0,0)",
 
         // --- warning_state 시드
         "INSERT INTO warning_state (region_id, kind, level, updated_at) VALUES " +
@@ -72,28 +74,51 @@ class NotificationServiceIT {
 
     @Autowired
     private RainOnsetChangeRule rainRule;      // SpyConfig 에서 주입되는 spy
+
     @Autowired
     private WarningIssuedRule warningRule;     // SpyConfig 에서 주입되는 spy
 
+    @Autowired
+    private RainForecastRule forecastRule;     // SpyConfig 에서 주입되는 spy
+
     @TestConfiguration
     static class SpyConfig {
+
         @Bean(name = "rainOnsetChangeRule")
         RainOnsetChangeRule rainOnsetChangeRuleSpy(ClimateService climateService) {
             return Mockito.spy(new RainOnsetChangeRule(climateService));
         }
+
         @Bean(name = "warningIssuedRule")
         WarningIssuedRule warningIssuedRuleSpy(WarningService warningService) {
             return Mockito.spy(new WarningIssuedRule(warningService));
         }
+
+        @Bean(name = "rainForecastRule")
+        RainForecastRule rainForecastRuleSpy(ClimateService climateService) {
+            return Mockito.spy(new RainForecastRule(climateService));
+        }
     }
+
+    // ----------------------------------------------------
+    // 기본 동작 / 공통 규칙
+    // ----------------------------------------------------
 
     @Test
     @DisplayName("receiveWarnings=false: 비 시작(AlertType=RAIN_ONSET) 알림만 생성되고 특보(WARNING_ISSUED)는 제외된다")
     void only_rain_when_receiveWarnings_false() {
+        int regionId01 = 1;
         var since = LocalDateTime.parse("2025-11-04T04:00:00");
+        NotificationRequest request = new NotificationRequest(
+                List.of(regionId01),
+                since,
+                null,    // enabledTypes -> null이면 normalizeEnabledTypes 에서 기본값 적용(RAIN_ONSET)
+                null,    // filterWarningKinds
+                null     // rainHourLimit
+        );
 
         // when
-        List<AlertEvent> events = service.generate(List.of(1), false, since);
+        List<AlertEvent> events = service.generate(request);
 
         // then
         assertThat(events).isNotEmpty();
@@ -104,25 +129,8 @@ class NotificationServiceIT {
 
         verify(rainRule, times(1)).evaluate(any(), any());
         verify(warningRule, never()).evaluate(any(), any());
-    }
-
-    @Test
-    @DisplayName("receiveWarnings=true: 비 시작 + 특보 발효(AlertType=RAIN_ONSET, WARNING_ISSUED) 모두 생성된다")
-    void rain_and_warnings_when_receiveWarnings_true() {
-        var since = LocalDateTime.parse("2025-11-04T04:00:00");
-        int regionId01 = 1, regionId02 = 2;
-
-        // when
-        List<AlertEvent> events = service.generate(List.of(regionId01, regionId02), true, since);
-
-        // then
-        assertThat(events).isNotEmpty();
-        assertThat(events)
-                .extracting(AlertEvent::type)
-                .contains(AlertTypeEnum.RAIN_ONSET, AlertTypeEnum.WARNING_ISSUED);
-
-        verify(rainRule, times(1)).evaluate(any(), any());
-        verify(warningRule, times(1)).evaluate(any(), any());
+        // FORECAST는 enabledTypes에 없으므로 호출 안 됨
+        verify(forecastRule, never()).evaluate(any(), any());
     }
 
     @Test
@@ -130,11 +138,21 @@ class NotificationServiceIT {
     void region_capped_to_three() {
         var since = LocalDateTime.parse("2025-11-04T04:00:00");
         var regionIds = List.of(10, 11, 12, 13); // 4개 입력
+        Set<AlertTypeEnum> enabled =
+                EnumSet.of(AlertTypeEnum.RAIN_ONSET, AlertTypeEnum.WARNING_ISSUED, AlertTypeEnum.RAIN_FORECAST);
+
+        NotificationRequest request = new NotificationRequest(
+                regionIds,
+                since,
+                enabled,
+                null,
+                null
+        );
 
         // when
-        service.generate(regionIds, EnumSet.of(AlertTypeEnum.RAIN_ONSET), since);
+        service.generate(request);
 
-        // then: 전달된 인자 캡처
+        // then: RainOnsetChangeRule 쪽 전달 인자 캡처
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<Integer>> captor = ArgumentCaptor.forClass(List.class);
         verify(rainRule, times(1)).evaluate(captor.capture(), any());
@@ -147,18 +165,24 @@ class NotificationServiceIT {
     @DisplayName("정렬: 타입 → 지역 → 타입명 → 시각 순으로 정렬된다")
     void sort_rule_applied() {
         var since = LocalDateTime.parse("2025-11-04T04:00:00");
-        int regionId01 = 1, regionId02 = 1;
+        var regionIds = List.of(1, 2);
+        Set<AlertTypeEnum> enabled =
+                EnumSet.of(AlertTypeEnum.RAIN_ONSET, AlertTypeEnum.WARNING_ISSUED, AlertTypeEnum.RAIN_FORECAST);
+
+        NotificationRequest request = new NotificationRequest(
+                regionIds,
+                since,
+                enabled,
+                null,
+                null
+        );
 
         // when
-        List<AlertEvent> events = service.generate(
-                List.of(regionId01, regionId02),
-                EnumSet.of(AlertTypeEnum.RAIN_ONSET, AlertTypeEnum.WARNING_ISSUED),
-                since
-        );
+        List<AlertEvent> events = service.generate(request);
 
         assertThat(events).isNotEmpty();
 
-        // 1) 타입 순서 검증: 같은 리스트 내에서 RAIN_ONSET 들이 WARNING_ISSUED 들보다 앞에 오는지
+        // 1) 같은 리스트 내에서 RAIN_ONSET 들이 WARNING_ISSUED 들보다 앞에 오는지
         List<Integer> rainIdx = new ArrayList<>();
         List<Integer> warnIdx = new ArrayList<>();
         for (int i = 0; i < events.size(); i++) {
@@ -185,9 +209,182 @@ class NotificationServiceIT {
 
         List<Integer> regionNums = rainEvents.stream()
                 .map(AlertEvent::regionId)
-                .map(Integer::valueOf)
                 .toList();
 
         assertThat(regionNums).isSorted(); // region asc
+    }
+
+    // ----------------------------------------------------
+    // 필터 분기: WarningIssuedRule / RainOnsetChangeRule 특수 오버로드
+    // ----------------------------------------------------
+
+    @Test
+    @DisplayName("filterWarningKinds가 있으면 WARNING_ISSUED 룰은 WarningIssuedRule.evaluate(regionIds, kinds, since)를 사용한다")
+    void filterWarningKinds_uses_warningIssuedRule_specialized_overload() {
+        var regionIds = List.of(1, 2);
+        LocalDateTime since = LocalDateTime.parse("2025-11-04T04:00:00");
+        Set<AlertTypeEnum> enabled = EnumSet.of(AlertTypeEnum.WARNING_ISSUED);
+        Set<WarningKind> kinds = EnumSet.of(WarningKind.RAIN);
+
+        NotificationRequest request = new NotificationRequest(
+                regionIds,
+                since,
+                enabled,
+                kinds,      // filterKinds
+                null        // rainHourLimit
+        );
+
+        // when
+        List<AlertEvent> events = service.generate(request);
+
+        // WARNING_ISSUED만 포함되는지만 대략 확인
+        assertThat(events)
+                .isNotEmpty()
+                .allMatch(e -> e.type() == AlertTypeEnum.WARNING_ISSUED);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Integer>> regionCaptor = ArgumentCaptor.forClass(List.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Set<WarningKind>> kindCaptor = ArgumentCaptor.forClass(Set.class);
+        ArgumentCaptor<LocalDateTime> sinceCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+
+        // WarningIssuedRule의 특수 시그니처가 호출되었는지 검증
+        verify(warningRule, times(1))
+                .evaluate(regionCaptor.capture(), kindCaptor.capture(), sinceCaptor.capture());
+
+        assertThat(regionCaptor.getValue()).containsExactly(1, 2);
+        assertThat(kindCaptor.getValue()).containsExactly(WarningKind.RAIN);
+        assertThat(sinceCaptor.getValue()).isEqualTo(since);
+
+        // 기본 evaluate(List<Integer>, LocalDateTime)는 호출되지 않아야 자연스럽다
+        verify(warningRule, never()).evaluate(any(), (LocalDateTime) any());
+        verify(rainRule, never()).evaluate(any(), any());
+        verify(forecastRule, never()).evaluate(any(), any());
+    }
+
+    @Test
+    @DisplayName("rainHourLimit가 있으면 RAIN_ONSET 룰은 RainOnsetChangeRule.evaluate(regionIds, since, hourLimit)를 사용한다")
+    void rainHourLimit_uses_rainOnsetChangeRule_specialized_overload() {
+        var regionIds = List.of(10, 11, 12, 13); // 4개 → limitRegions 로 앞 3개만 사용
+        LocalDateTime since = LocalDateTime.parse("2025-11-04T04:00:00");
+        int limitHour = 12;
+
+        Set<AlertTypeEnum> enabled = EnumSet.of(AlertTypeEnum.RAIN_ONSET);
+        NotificationRequest request = new NotificationRequest(
+                regionIds,
+                since,
+                enabled,
+                null,
+                limitHour
+        );
+
+        // when
+        List<AlertEvent> events = service.generate(request);
+
+        // then: 특수 오버로드 호출 여부만 검증
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Integer>> regionCaptor = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<LocalDateTime> sinceCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        ArgumentCaptor<Integer> limitCaptor = ArgumentCaptor.forClass(Integer.class);
+
+        verify(rainRule, times(1))
+                .evaluate(regionCaptor.capture(), sinceCaptor.capture(), limitCaptor.capture());
+
+        // limitRegions 적용 확인 (앞 3개만 전달)
+        assertThat(regionCaptor.getValue()).containsExactly(10, 11, 12);
+        assertThat(sinceCaptor.getValue()).isEqualTo(since);
+        assertThat(limitCaptor.getValue()).isEqualTo(limitHour);
+
+        // 기본 evaluate(List<Integer>, LocalDateTime)는 호출되지 않아야 자연스럽다
+        verify(rainRule, never()).evaluate(any(), (LocalDateTime) any());
+        verify(warningRule, never()).evaluate(any(), any());
+        verify(forecastRule, never()).evaluate(any(), any());
+    }
+
+    // ----------------------------------------------------
+    // RAIN_FORECAST: RainForecastRule 통합 동작 검증
+    // ----------------------------------------------------
+
+    @Test
+    @DisplayName("RAIN_FORECAST: enabledTypes에 RAIN_FORECAST만 있으면 예보 요약 이벤트만 생성되고 다른 룰은 호출되지 않는다")
+    void only_forecast_when_enabled_rain_forecast() {
+        var since = LocalDateTime.parse("2025-11-18T07:00:00");
+        var regionIds = List.of(1);   // climate_snap 시드에 존재하는 지역
+
+        Set<AlertTypeEnum> enabled = EnumSet.of(AlertTypeEnum.RAIN_FORECAST);
+
+        NotificationRequest request = new NotificationRequest(
+                regionIds,
+                since,
+                enabled,
+                null,
+                null
+        );
+
+        // when
+        List<AlertEvent> events = service.generate(request);
+
+        // then
+        assertThat(events).isNotEmpty();
+        assertThat(events)
+                .extracting(AlertEvent::type)
+                .containsOnly(AlertTypeEnum.RAIN_FORECAST);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Integer>> regionCaptor = ArgumentCaptor.forClass(List.class);
+        verify(forecastRule, times(1)).evaluate(regionCaptor.capture(), any());
+        assertThat(regionCaptor.getValue()).containsExactlyElementsOf(regionIds);
+
+        verify(rainRule, never()).evaluate(any(), any());
+        verify(warningRule, never()).evaluate(any(), any());
+    }
+
+    @Test
+    @DisplayName("RAIN_FORECAST: payload에 hourlyParts/dayParts가 포함되고 형식이 유지된다")
+    void forecast_payload_structure_is_valid() {
+        var since = LocalDateTime.parse("2025-11-18T07:00:00");
+        var regionIds = List.of(1);
+
+        Set<AlertTypeEnum> enabled = EnumSet.of(AlertTypeEnum.RAIN_FORECAST);
+
+        NotificationRequest request = new NotificationRequest(
+                regionIds,
+                since,
+                enabled,
+                null,
+                null
+        );
+
+        // when
+        List<AlertEvent> events = service.generate(request);
+
+        // then
+        assertThat(events).hasSize(1);
+        AlertEvent e = events.get(0);
+        assertThat(e.type()).isEqualTo(AlertTypeEnum.RAIN_FORECAST);
+        assertThat(e.regionId()).isEqualTo(1);
+
+        Map<String, Object> payload = e.payload();
+        assertThat(payload).containsKeys("_srcRule", "hourlyParts", "dayParts");
+
+        @SuppressWarnings("unchecked")
+        List<List<Integer>> hourly = (List<List<Integer>>) payload.get("hourlyParts");
+        @SuppressWarnings("unchecked")
+        List<List<Integer>> day = (List<List<Integer>>) payload.get("dayParts");
+
+        // hourlyParts: [startIdx, endIdx] 쌍 리스트, 인덱스는 0~23 범위, start <= end
+        for (List<Integer> part : hourly) {
+            assertThat(part).hasSize(2);
+            assertThat(part.get(0)).isBetween(0, 23);
+            assertThat(part.get(1)).isBetween(0, 23);
+            assertThat(part.get(0)).isLessThanOrEqualTo(part.get(1));
+        }
+
+        // dayParts: [amFlag, pmFlag] 쌍 리스트, 값은 0 또는 1
+        for (List<Integer> dp : day) {
+            assertThat(dp).hasSize(2);
+            assertThat(dp.get(0)).isIn(0, 1);
+            assertThat(dp.get(1)).isIn(0, 1);
+        }
     }
 }

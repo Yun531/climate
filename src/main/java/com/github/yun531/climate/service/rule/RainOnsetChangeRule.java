@@ -30,8 +30,19 @@ public class RainOnsetChangeRule implements AlertRule {
         return AlertTypeEnum.RAIN_ONSET;
     }
 
+    /** default: 시간 제한 없이 전체 이벤트 */
     @Override
     public List<AlertEvent> evaluate(List<Integer> regionIds, LocalDateTime since) {
+        return evaluate(regionIds, since, null);
+    }
+
+    /**
+     * maxHour 까지의 비 시작 알림만 반환.
+     * - maxHour == null 이면 전체 시간대 반환
+     */
+    public List<AlertEvent> evaluate(List<Integer> regionIds,
+                                     LocalDateTime since,
+                                     Integer maxHour) {
         if (regionIds == null || regionIds.isEmpty()) {
             return List.of();
         }
@@ -44,15 +55,42 @@ public class RainOnsetChangeRule implements AlertRule {
                             regionId,
                             since,
                             RECOMPUTE_THRESHOLD_MINUTES,
-                            () -> computeForRegion(regionId)    // 람다(함수 객체)
+                            () -> computeForRegion(regionId)
                     );
 
             if (entry == null || entry.value() == null || entry.value().isEmpty()) {
                 continue;
             }
-            out.addAll(entry.value());
+
+            List<AlertEvent> events = entry.value();
+            // maxHour 가 지정되면 hour <= maxHour 인 것만 필터링
+            if (maxHour != null) {
+                events = filterByMaxHour(events, maxHour);
+            }
+
+            if (!events.isEmpty()) {
+                out.addAll(events);
+            }
         }
         return out;
+    }
+
+    /** hour <= maxHour 인 이벤트만 남긴다.  */
+    private List<AlertEvent> filterByMaxHour(List<AlertEvent> events, int maxHour) {
+        List<AlertEvent> filtered = new ArrayList<>();
+
+        for (AlertEvent e : events) {
+            Object hourObj = e.payload().get("hour");
+
+            if (hourObj instanceof Integer h) {
+                if (h <= maxHour) {
+                    filtered.add(e);
+                }
+            } else { // hour 정보가 없으면 일단 포함
+                filtered.add(e);
+            }
+        }
+        return filtered;
     }
 
     // 한 지역에 대한 비 시작 시점 계산
@@ -94,12 +132,14 @@ public class RainOnsetChangeRule implements AlertRule {
         }
 
         List<AlertEvent> events = new ArrayList<>();
+
+        // 1) 이전 스냅과 비교 가능한 구간: "새로 시작한 비"만 감지
         for (int h = 0; h <= maxH; h++) {
             if (isRainOnset(cur, prv, gap, h)) {
                 events.add(createRainOnsetEvent(regionId, computedAt, h, cur.get(h)));
             }
         }
-
+        // 2) maxH 이후 구간: 현재(cur)에서 비면 전부 이벤트로 간주
         int curLimit = cur.size() - 1;
         for (int h = maxH + 1; h <= curLimit; h++) {
             if (isRain(cur, h)) {

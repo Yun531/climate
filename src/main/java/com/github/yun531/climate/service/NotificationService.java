@@ -1,10 +1,7 @@
 package com.github.yun531.climate.service;
 
 import com.github.yun531.climate.dto.WarningKind;
-import com.github.yun531.climate.service.rule.AlertEvent;
-import com.github.yun531.climate.service.rule.AlertRule;
-import com.github.yun531.climate.service.rule.AlertTypeEnum;
-import com.github.yun531.climate.service.rule.WarningIssuedRule;
+import com.github.yun531.climate.service.rule.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
@@ -21,55 +18,24 @@ public class NotificationService {
 
     private final List<AlertRule> rules; // @Component 룰 자동 주입 (RAIN_ONSET, WARNING_ISSUED 등)
 
-    /** default: RAIN_ONSET만 제공 */
-    public List<AlertEvent> generate(List<Integer> regionIds,
-                                     boolean receiveWarnings,
-                                     @Nullable LocalDateTime since) {
+    public List<AlertEvent> generate(NotificationRequest request) {
+        if (request == null) {
+            return List.of();
+        }
 
-        LocalDateTime effectiveSince = sinceOrNow(since);
-        Set<AlertTypeEnum> enabled   = defaultEnabledTypes(receiveWarnings);
-
-        return generateInternal(regionIds, enabled, effectiveSince, null);
-    }
-
-    /** 특정 AlertType 들에 대해서 요청 */
-    public List<AlertEvent> generate(List<Integer> regionIds,
-                                     @Nullable Set<AlertTypeEnum> enabledTypes,
-                                     @Nullable LocalDateTime since) {
-
-        LocalDateTime effectiveSince = sinceOrNow(since);
-        Set<AlertTypeEnum> enabled   = normalizeEnabledTypes(enabledTypes);
-
-        return generateInternal(regionIds, enabled, effectiveSince, null);
-    }
-
-    /**
-     * enabledTypes + WarningKind 필터를 함께 지정 가능한 버전.
-     * - enabledTypes 에 WARNING_ISSUED 가 포함돼 있을 때만 filterKind 적용
-     * - 다른 타입(RAIN_ONSET, RAIN_FORECAST 등)은 그대로 동작
-     */
-    public List<AlertEvent> generate(List<Integer> regionIds,
-                                     @Nullable Set<AlertTypeEnum> enabledTypes,
-                                     @Nullable LocalDateTime since,
-                                     @Nullable Set<WarningKind> filterKinds) {
-
-        LocalDateTime effectiveSince = sinceOrNow(since);
-        Set<AlertTypeEnum> enabled   = normalizeEnabledTypes(enabledTypes);
-
-        return generateInternal(regionIds, enabled, effectiveSince, filterKinds);
-    }
-
-    private List<AlertEvent> generateInternal(List<Integer> regionIds,
-                                              Set<AlertTypeEnum> enabledTypes,
-                                              LocalDateTime since,
-                                              @Nullable Set<WarningKind> filterKinds) {
-
+        List<Integer> regionIds = request.regionIds();
         if (regionIds == null || regionIds.isEmpty()) {
             return List.of();
         }
 
+        LocalDateTime effectiveSince    = sinceOrNow(request.since());
+        Set<AlertTypeEnum> enabledTypes = normalizeEnabledTypes(request.enabledTypes());
+        Set<WarningKind> filterKinds    = request.filterWarningKinds();
+        Integer rainHourLimit           = request.rainHourLimit();
+
         List<Integer> targetRegions = limitRegions(regionIds);
-        List<AlertEvent> events     = collectEvents(targetRegions, enabledTypes, since, filterKinds);
+        List<AlertEvent> events     =
+                collectEvents(targetRegions, enabledTypes, effectiveSince, filterKinds, rainHourLimit);
         List<AlertEvent> deduped    = deduplicate(events);
         sortEvents(deduped);
 
@@ -80,33 +46,41 @@ public class NotificationService {
     private List<AlertEvent> collectEvents(List<Integer> targetRegions,
                                            Set<AlertTypeEnum> enabledTypes,
                                            LocalDateTime since,
-                                           @Nullable Set<WarningKind> filterKinds) {
+                                           @Nullable Set<WarningKind> filterKinds,
+                                           @Nullable Integer rainHourLimit) {
 
         return rules.stream()
                 .filter(r -> enabledTypes.contains(r.supports()))
-                .flatMap(r -> evaluateRuleWithFilter(r, targetRegions, since, filterKinds).stream())
+                .flatMap(r -> evaluateRuleWithFilter(r, targetRegions, since, filterKinds, rainHourLimit).stream())
                 .collect(Collectors.toList());
     }
 
     /**
-     * filterKind 가 주어졌을 때:
-     *  - WARNING_ISSUED 를 지원하는 WarningIssuedRule 이면
-     *      → WarningIssuedRule.evaluate(regionIds, filterKind, since) 호출
-     *  - 그 외에는 기본 AlertRule.evaluate(regionIds, since) 호출
+     * - filterWarningKinds 가 있을 때 WARNING_ISSUED 룰 → WarningIssuedRule.evaluate(regionIds, filterWarningKinds, since)
+     * - rainHourLimit 가 있을 때 RAIN_ONSET 룰 → RainOnsetChangeRule.evaluate(regionIds, since, rainHourLimit)
+     * - 나머지는 기본 AlertRule.evaluate(regionIds, since)
      */
     private List<AlertEvent> evaluateRuleWithFilter(AlertRule rule,
                                                     List<Integer> targetRegions,
                                                     LocalDateTime since,
-                                                    @Nullable Set<WarningKind> filterKinds) {
+                                                    @Nullable Set<WarningKind> filterKinds,
+                                                    @Nullable Integer rainHourLimit) {
 
+        // 1) 특보 종류 필터
         if (filterKinds != null
                 && rule.supports() == AlertTypeEnum.WARNING_ISSUED
                 && rule instanceof WarningIssuedRule wir) {
-            // 특정 기상특보 종류만 필터링
             return wir.evaluate(targetRegions, filterKinds, since);
         }
 
-        // 나머지 룰은 기존 로직 유지
+        // 2) 비 시작 시간 상한(0~23) 필터
+        if (rainHourLimit != null
+                && rule.supports() == AlertTypeEnum.RAIN_ONSET
+                && rule instanceof RainOnsetChangeRule roc) {
+            return roc.evaluate(targetRegions, since, rainHourLimit);
+        }
+
+        // 3) 기본 동작
         return rule.evaluate(targetRegions, since);
     }
 
@@ -136,7 +110,6 @@ public class NotificationService {
             return "-";
         }
 
-        // 키 이름 정렬 → 불규칙한 Map 순서 문제 해결
         return payload.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
                 .map(e -> e.getKey() + "=" + stringify(e.getValue()))
@@ -149,7 +122,7 @@ public class NotificationService {
         return String.valueOf(v);
     }
 
-    /** evnet 정렬: 타입(ordinal) → 지역ID → 타입 이름 → 발생시각 순 */
+    /** event 정렬: 타입(ordinal) → 지역ID → 타입 이름 → 발생시각 순 */
     private void sortEvents(List<AlertEvent> events) {
         events.sort(Comparator
                 .comparing(AlertEvent::type,
@@ -188,102 +161,4 @@ public class NotificationService {
         }
         return regionIds.subList(0, 3);
     }
-
-
-//    /** 포맷팅 부분: 타입별 */
-//    private List<String> toMessages(List<AlertEvent> events) {
-//        return events.stream()
-//                .map(this::format)
-//                .toList();
-//    }
-//
-//    private String format(AlertEvent event) {
-//        return switch (event.type()) {
-//            case RAIN_ONSET   -> formatRainOnset(event);
-//            case WARNING_ISSUED -> formatWarningIssued(event);
-//            case RAIN_FORECAST  -> formatRainForecast(event);
-//            default              -> formatDefault(event);
-//        };
-//    }
-//
-//    private String formatRainOnset(AlertEvent event) {
-//        String ts = formatTimestamp(event);
-//
-//        Object hourObj = event.payload().get("hour");
-//        Object popObj  = event.payload().get("pop");
-//        String hourStr = hourObj == null ? "?" : hourObj.toString();
-//        String popStr  = popObj == null ? "?" : popObj.toString();
-//
-//        return "지역 %d | %s | %s시 비 시작 (POP %s%%)"
-//                .formatted(event.regionId(), ts, hourStr, popStr);
-//    }
-//
-//    private String formatWarningIssued(AlertEvent event) {
-//        String ts = formatTimestamp(event);
-//
-//        Object kindObj  = event.payload().get("kind");
-//        Object levelObj = event.payload().get("level");
-//
-//        String kindLabel  = (kindObj instanceof WarningKind k) ? k.getLabel() : String.valueOf(kindObj);
-//        String levelLabel = (levelObj instanceof WarningLevel l) ? l.getLabel() : String.valueOf(levelObj);
-//
-//        return "지역 %d | %s | %s %s 발효"
-//                .formatted(event.regionId(), ts, kindLabel, levelLabel);
-//    }
-//
-//    private String formatRainForecast(AlertEvent event) {
-//        String hourlyJoined = joinParts(event.payload().get("hourlyParts"));
-//        String dayJoined    = joinParts(event.payload().get("dayParts"));
-//
-//        if (!hourlyJoined.isEmpty() || !dayJoined.isEmpty()) {
-//            List<String> pieces = new ArrayList<>(2);
-//            if (!hourlyJoined.isEmpty()) pieces.add(hourlyJoined);
-//            if (!dayJoined.isEmpty())    pieces.add(dayJoined);
-//
-//            String body = String.join(", ", pieces) + " 비 예보";
-//            return "지역 %d | %s".formatted(event.regionId(), body);
-//        }
-//
-//        Object text = event.payload().get("text");
-//        if (text != null && !text.toString().isBlank()) {
-//            return "지역 %d | %s".formatted(event.regionId(), text.toString().trim());
-//        }
-//
-//        return "지역 %d | 비 예보 없음".formatted(event.regionId());
-//    }
-//
-//    private String formatDefault(AlertEvent event) {
-//        String ts = formatTimestamp(event);
-//        String typeName = (event.type() == null) ? "UNKNOWN" : event.type().name();
-//        return "지역 %d | %s | %s"
-//                .formatted(event.regionId(), ts, typeName);
-//    }
-//
-//    private String formatTimestamp(AlertEvent event) {
-//        if (event.occurredAt() == null) {
-//            return "";
-//        }
-//        return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-//                .withZone(ZoneId.of("Asia/Seoul"))
-//                .format(event.occurredAt());
-//    }
-//
-//    /** payload에서 리스트 계열(hourlyParts/dayParts 등)을 안전하게 조인 */
-//    @SuppressWarnings("unchecked")
-//    private String joinParts(Object raw) {
-//        if (raw == null) return "";
-//        if (raw instanceof String s) return s.trim();
-//
-//        if (raw instanceof Collection<?> col) {
-//            List<String> items = new ArrayList<>(col.size());
-//            for (Object o : col) {
-//                if (o == null) continue;
-//                String s = o.toString().trim();
-//                if (!s.isEmpty()) items.add(s);
-//            }
-//            return String.join(", ", items);
-//        }
-//
-//        return raw.toString().trim();
-//    }
 }
