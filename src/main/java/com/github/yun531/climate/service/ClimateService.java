@@ -21,7 +21,7 @@ public class ClimateService {
     private static final int SNAP_CURRENT = SnapKindEnum.SNAP_CURRENT.getCode();
     private static final int SNAP_PREV    = SnapKindEnum.SNAP_PREVIOUS.getCode();
 
-    private final ForecastSnapshotProvider snapshotProvider;
+    private final SnapshotProvider snapshotProvider;
 
     /* ======================= 알림용 POP 시계열 ======================= */
 

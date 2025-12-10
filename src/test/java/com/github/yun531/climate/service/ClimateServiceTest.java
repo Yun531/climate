@@ -22,7 +22,7 @@ import static org.mockito.Mockito.*;
 class ClimateServiceTest {
 
     @Mock
-    ForecastSnapshotProvider snapshotProvider;
+    SnapshotProvider snapshotProvider;
 
     ClimateService climateService;
 
